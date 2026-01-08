@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,10 +47,14 @@ import {
   ClipboardList,
   RefreshCw,
   CheckCircle2,
-  Circle
+  Circle,
+  Search,
+  User,
+  Users,
+  X
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { formatCurrency, getRepeatDayText } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 
 interface VoucherCompletion {
   year: number;
@@ -71,6 +75,7 @@ interface Voucher {
 }
 
 type TabType = 'monthly' | 'master';
+type ViewMode = 'my' | 'all';
 
 export default function VouchersPage() {
   const { data: session } = useSession();
@@ -79,6 +84,8 @@ export default function VouchersPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState<Voucher | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('monthly');
+  const [viewMode, setViewMode] = useState<ViewMode>('my');
+  const [searchQuery, setSearchQuery] = useState('');
   const [formData, setFormData] = useState({
     description: '',
     amount: '',
@@ -91,6 +98,8 @@ export default function VouchersPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1; // 1-12
+
+  const isAdmin = session?.user?.isAdmin || false;
 
   useEffect(() => {
     fetchVouchers();
@@ -275,8 +284,31 @@ export default function VouchersPage() {
     return voucher.repeatDay === 0 || repeatDay <= lastDay;
   };
 
+  // 내 전표/전체 전표 필터링
+  const viewFilteredVouchers = useMemo(() => {
+    if (!isAdmin || viewMode === 'all') {
+      return vouchers;
+    }
+    return vouchers.filter(v => v.userId === session?.user?.id);
+  }, [vouchers, isAdmin, viewMode, session?.user?.id]);
+
+  // 검색 필터링
+  const searchFilteredVouchers = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return viewFilteredVouchers;
+    }
+    const query = searchQuery.toLowerCase();
+    return viewFilteredVouchers.filter(v => 
+      v.description.toLowerCase().includes(query) ||
+      v.accountName.toLowerCase().includes(query) ||
+      v.user.name.toLowerCase().includes(query)
+    );
+  }, [viewFilteredVouchers, searchQuery]);
+
   // 해당 월에 표시할 전표 필터링
-  const filteredVouchers = vouchers.filter(v => shouldShowInMonth(v, currentYear, currentMonth));
+  const filteredVouchers = useMemo(() => {
+    return searchFilteredVouchers.filter(v => shouldShowInMonth(v, currentYear, currentMonth));
+  }, [searchFilteredVouchers, currentYear, currentMonth]);
 
   // 처리 완료/미완료 통계
   const completedCount = filteredVouchers.filter(v => isCompletedForMonth(v, currentYear, currentMonth)).length;
@@ -309,6 +341,65 @@ export default function VouchersPage() {
         </div>
       </div>
 
+      {/* 관리자용 내 전표/전체 전표 토글 + 검색 */}
+      <div className="flex items-center justify-between gap-4">
+        {/* 관리자용 뷰 토글 */}
+        {isAdmin && (
+          <div className="flex items-center bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('my')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                viewMode === 'my'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <User className="h-4 w-4" />
+              내 전표
+            </button>
+            <button
+              onClick={() => setViewMode('all')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                viewMode === 'all'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              전체 전표
+            </button>
+          </div>
+        )}
+
+        {/* 검색 */}
+        <div className="flex-1 max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="적요명, 계정과목, 담당자로 검색..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-10"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 검색 결과 표시 */}
+        {searchQuery && (
+          <Badge variant="secondary" className="whitespace-nowrap">
+            검색결과: {searchFilteredVouchers.length}건
+          </Badge>
+        )}
+      </div>
+
       {/* 탭 네비게이션 */}
       <div className="border-b border-gray-200">
         <nav className="flex space-x-8">
@@ -337,7 +428,7 @@ export default function VouchersPage() {
             <ClipboardList className="h-5 w-5" />
             등록된 전표 목록
             <Badge variant={activeTab === 'master' ? 'default' : 'secondary'} className="ml-1 bg-indigo-100 text-indigo-700">
-              {vouchers.length}건
+              {searchFilteredVouchers.length}건
             </Badge>
           </button>
         </nav>
@@ -389,7 +480,9 @@ export default function VouchersPage() {
                 <ListChecks className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-blue-900">월별 처리 현황</h3>
+                <h3 className="font-semibold text-blue-900">
+                  {isAdmin && viewMode === 'all' ? '전체 사용자의 ' : ''}월별 처리 현황
+                </h3>
                 <p className="text-sm text-blue-700 mt-1">
                   아래 목록은 <strong>{formatMonth(currentDate)}</strong>에 처리해야 할 전표입니다. 
                   체크박스를 클릭하여 처리 완료를 표시하세요.
@@ -406,6 +499,12 @@ export default function VouchersPage() {
               <CardTitle className="text-lg flex items-center gap-2">
                 <FileText className="h-5 w-5 text-blue-600" />
                 {formatMonth(currentDate)} 처리 목록
+                {isAdmin && viewMode === 'all' && (
+                  <Badge variant="outline" className="ml-2 bg-purple-50 text-purple-700 border-purple-200">
+                    <Users className="h-3 w-3 mr-1" />
+                    전체
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription>
                 체크박스를 클릭하여 이번 달 처리 완료를 표시하세요
@@ -419,8 +518,12 @@ export default function VouchersPage() {
               ) : filteredVouchers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                   <FileText className="h-12 w-12 text-gray-300 mb-3" />
-                  <p className="font-medium">등록된 전표가 없습니다</p>
-                  <p className="text-sm">먼저 &apos;등록된 전표 목록&apos; 탭에서 전표를 등록하세요</p>
+                  <p className="font-medium">
+                    {searchQuery ? '검색 결과가 없습니다' : '등록된 전표가 없습니다'}
+                  </p>
+                  <p className="text-sm">
+                    {searchQuery ? '다른 검색어를 입력해보세요' : "먼저 '등록된 전표 목록' 탭에서 전표를 등록하세요"}
+                  </p>
                 </div>
               ) : (
                 <Table>
@@ -432,7 +535,7 @@ export default function VouchersPage() {
                       <TableHead className="text-right">금액</TableHead>
                       <TableHead className="text-right">부가세</TableHead>
                       <TableHead className="text-center">처리일</TableHead>
-                      {session?.user?.isAdmin && <TableHead>담당자</TableHead>}
+                      {isAdmin && viewMode === 'all' && <TableHead>담당자</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -440,6 +543,7 @@ export default function VouchersPage() {
                       const isCompleted = isCompletedForMonth(voucher, currentYear, currentMonth);
                       const lastDay = getLastDayOfMonth(currentYear, currentMonth);
                       const displayDay = voucher.repeatDay === 0 ? lastDay : voucher.repeatDay;
+                      const isMyVoucher = voucher.userId === session?.user?.id;
                       
                       return (
                         <TableRow 
@@ -451,6 +555,7 @@ export default function VouchersPage() {
                               checked={isCompleted}
                               onCheckedChange={(checked) => handleComplete(voucher.id, checked as boolean)}
                               className={isCompleted ? 'border-green-600 bg-green-600 text-white' : ''}
+                              disabled={isAdmin && viewMode === 'all' && !isMyVoucher}
                             />
                           </TableCell>
                           <TableCell className="font-medium">
@@ -478,9 +583,18 @@ export default function VouchersPage() {
                               {voucher.repeatDay === 0 ? `${displayDay}일 (말일)` : `${displayDay}일`}
                             </Badge>
                           </TableCell>
-                          {session?.user?.isAdmin && (
-                            <TableCell className={`${isCompleted ? 'text-green-600' : 'text-gray-500'}`}>
-                              {voucher.user.name}
+                          {isAdmin && viewMode === 'all' && (
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <span className={`${isCompleted ? 'text-green-600' : 'text-gray-500'}`}>
+                                  {voucher.user.name}
+                                </span>
+                                {isMyVoucher && (
+                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                                    나
+                                  </Badge>
+                                )}
+                              </div>
                             </TableCell>
                           )}
                         </TableRow>
@@ -505,7 +619,9 @@ export default function VouchersPage() {
                   <ClipboardList className="h-5 w-5 text-indigo-600" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-indigo-900">등록된 전표 (마스터 데이터)</h3>
+                  <h3 className="font-semibold text-indigo-900">
+                    {isAdmin && viewMode === 'all' ? '전체 ' : ''}등록된 전표 (마스터 데이터)
+                  </h3>
                   <p className="text-sm text-indigo-700 mt-1">
                     여기서 등록/수정/삭제한 전표는 <strong>매월 자동으로 반복</strong>됩니다.
                     <br />
@@ -637,8 +753,14 @@ export default function VouchersPage() {
                 <ClipboardList className="h-5 w-5 text-indigo-600" />
                 등록된 전표 목록
                 <Badge className="ml-2 bg-indigo-100 text-indigo-700">
-                  총 {vouchers.length}건
+                  총 {searchFilteredVouchers.length}건
                 </Badge>
+                {isAdmin && viewMode === 'all' && (
+                  <Badge variant="outline" className="ml-2 bg-purple-50 text-purple-700 border-purple-200">
+                    <Users className="h-3 w-3 mr-1" />
+                    전체
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription>
                 아래 전표들은 매월 자동으로 반복됩니다. 수정/삭제 시 모든 월에 반영됩니다.
@@ -649,11 +771,15 @@ export default function VouchersPage() {
                 <div className="flex items-center justify-center py-12">
                   <div className="h-8 w-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
                 </div>
-              ) : vouchers.length === 0 ? (
+              ) : searchFilteredVouchers.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-500">
                   <ClipboardList className="h-12 w-12 text-gray-300 mb-3" />
-                  <p className="font-medium">등록된 전표가 없습니다</p>
-                  <p className="text-sm">&apos;전표 등록&apos; 버튼을 클릭하여 새 전표를 추가하세요</p>
+                  <p className="font-medium">
+                    {searchQuery ? '검색 결과가 없습니다' : '등록된 전표가 없습니다'}
+                  </p>
+                  <p className="text-sm">
+                    {searchQuery ? '다른 검색어를 입력해보세요' : "'전표 등록' 버튼을 클릭하여 새 전표를 추가하세요"}
+                  </p>
                 </div>
               ) : (
                 <Table>
@@ -664,56 +790,75 @@ export default function VouchersPage() {
                       <TableHead className="text-right">금액</TableHead>
                       <TableHead className="text-right">부가세</TableHead>
                       <TableHead className="text-center">반복일자</TableHead>
-                      {session?.user?.isAdmin && <TableHead>담당자</TableHead>}
+                      {isAdmin && viewMode === 'all' && <TableHead>담당자</TableHead>}
                       <TableHead className="text-center">등록일</TableHead>
                       <TableHead className="w-24 text-center">관리</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {vouchers.map((voucher) => (
-                      <TableRow key={voucher.id} className="hover:bg-indigo-50/30">
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <RefreshCw className="h-4 w-4 text-indigo-400" />
-                            {voucher.description}
-                          </div>
-                        </TableCell>
-                        <TableCell>{voucher.accountName}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(voucher.amount)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(voucher.vatAmount)}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200">
-                            {voucher.repeatDay === 0 ? '매월 말일' : `매월 ${voucher.repeatDay}일`}
-                          </Badge>
-                        </TableCell>
-                        {session?.user?.isAdmin && (
-                          <TableCell className="text-gray-500">{voucher.user.name}</TableCell>
-                        )}
-                        <TableCell className="text-center text-gray-500 text-sm">
-                          {new Date(voucher.createdAt).toLocaleDateString('ko-KR')}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(voucher)}
-                              className="h-8 w-8 hover:bg-indigo-100"
-                            >
-                              <Pencil className="h-4 w-4 text-indigo-600" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(voucher.id)}
-                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {searchFilteredVouchers.map((voucher) => {
+                      const isMyVoucher = voucher.userId === session?.user?.id;
+                      return (
+                        <TableRow key={voucher.id} className="hover:bg-indigo-50/30">
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <RefreshCw className="h-4 w-4 text-indigo-400" />
+                              {voucher.description}
+                            </div>
+                          </TableCell>
+                          <TableCell>{voucher.accountName}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(voucher.amount)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(voucher.vatAmount)}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge className="bg-indigo-100 text-indigo-700 border-indigo-200">
+                              {voucher.repeatDay === 0 ? '매월 말일' : `매월 ${voucher.repeatDay}일`}
+                            </Badge>
+                          </TableCell>
+                          {isAdmin && viewMode === 'all' && (
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <span className="text-gray-500">{voucher.user.name}</span>
+                                {isMyVoucher && (
+                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-600 border-blue-200">
+                                    나
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
+                          <TableCell className="text-center text-gray-500 text-sm">
+                            {new Date(voucher.createdAt).toLocaleDateString('ko-KR')}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-center gap-1">
+                              {(isMyVoucher || !isAdmin) && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleEdit(voucher)}
+                                    className="h-8 w-8 hover:bg-indigo-100"
+                                  >
+                                    <Pencil className="h-4 w-4 text-indigo-600" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDelete(voucher.id)}
+                                    className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
+                              {isAdmin && viewMode === 'all' && !isMyVoucher && (
+                                <span className="text-xs text-gray-400">보기 전용</span>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
