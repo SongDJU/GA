@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Download, Upload, FileText } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, Upload, FileText, FileSpreadsheet } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { formatCurrency, getRepeatDayText } from '@/lib/utils';
 
@@ -223,6 +223,10 @@ export default function VouchersPage() {
           <p className="text-gray-500 mt-1">반복되는 전표를 관리하세요</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => window.location.href = '/api/vouchers/template'}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            템플릿
+          </Button>
           <Button variant="outline" onClick={handleExport}>
             <Download className="h-4 w-4 mr-2" />
             내보내기
