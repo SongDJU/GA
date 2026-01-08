@@ -19,20 +19,33 @@ export async function GET() {
       where,
       include: {
         user: { select: { name: true } },
+        completions: {
+          select: { year: true, month: true },
+        },
       },
       orderBy: [{ repeatDay: 'asc' }],
     });
 
+    // Get current month info for completion status
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
     // Prepare data for Excel
-    const data = vouchers.map((v) => ({
-      적요명: v.description,
-      금액: v.amount,
-      부가세액: v.vatAmount,
-      계정과목명: v.accountName,
-      반복일자: v.repeatDay === 0 ? '말일' : `${v.repeatDay}일`,
-      처리완료: v.isCompleted ? 'O' : 'X',
-      담당자: v.user.name,
-    }));
+    const data = vouchers.map((v) => {
+      const isCompletedThisMonth = v.completions.some(
+        (c) => c.year === currentYear && c.month === currentMonth
+      );
+      return {
+        적요명: v.description,
+        금액: v.amount,
+        부가세액: v.vatAmount,
+        계정과목명: v.accountName,
+        반복일자: v.repeatDay === 0 ? '말일' : `${v.repeatDay}일`,
+        이번달처리완료: isCompletedThisMonth ? 'O' : 'X',
+        담당자: v.user.name,
+      };
+    });
 
     // Create workbook
     const wb = XLSX.utils.book_new();
@@ -45,7 +58,7 @@ export async function GET() {
       { wch: 15 }, // 부가세액
       { wch: 20 }, // 계정과목명
       { wch: 10 }, // 반복일자
-      { wch: 10 }, // 처리완료
+      { wch: 15 }, // 이번달처리완료
       { wch: 15 }, // 담당자
     ];
 

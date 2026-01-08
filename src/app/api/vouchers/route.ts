@@ -18,8 +18,11 @@ export async function GET() {
       where,
       include: {
         user: { select: { name: true } },
+        completions: {
+          select: { year: true, month: true },
+        },
       },
-      orderBy: [{ isCompleted: 'asc' }, { repeatDay: 'asc' }],
+      orderBy: [{ repeatDay: 'asc' }],
     });
 
     return NextResponse.json(vouchers);

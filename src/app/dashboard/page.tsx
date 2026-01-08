@@ -8,15 +8,14 @@ import Link from 'next/link';
 
 async function getDashboardData(userId: string, isAdmin: boolean) {
   const today = new Date();
-  const currentMonth = today.getMonth();
+  const currentMonth = today.getMonth() + 1; // 1-12
   const currentYear = today.getFullYear();
   const currentDay = today.getDate();
-  const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
 
-  // Get vouchers for current month (not completed, not deleted)
+  // Get vouchers (not deleted) with completions
   const voucherWhere = {
     deletedAt: null,
-    isCompleted: false,
     ...(isAdmin ? {} : { userId }),
   };
 
@@ -24,12 +23,22 @@ async function getDashboardData(userId: string, isAdmin: boolean) {
     where: voucherWhere,
     include: {
       user: { select: { name: true } },
+      completions: {
+        where: {
+          year: currentYear,
+          month: currentMonth,
+        },
+        select: { year: true, month: true },
+      },
     },
     orderBy: { repeatDay: 'asc' },
   });
 
-  // Filter vouchers that should appear this month
+  // Filter vouchers that are not completed this month and should appear
   const thisMonthVouchers = vouchers.filter((v) => {
+    // Skip if already completed this month
+    if (v.completions && v.completions.length > 0) return false;
+    
     const repeatDay = v.repeatDay === 0 ? lastDayOfMonth : v.repeatDay;
     return repeatDay >= currentDay;
   });
@@ -63,8 +72,16 @@ async function getDashboardData(userId: string, isAdmin: boolean) {
     where: { deletedAt: null, ...(isAdmin ? {} : { userId }) },
   });
 
-  const completedVouchers = await prisma.voucher.count({
-    where: { deletedAt: null, isCompleted: true, ...(isAdmin ? {} : { userId }) },
+  // Count vouchers completed this month
+  const completedVouchersThisMonth = await prisma.voucherCompletion.count({
+    where: {
+      year: currentYear,
+      month: currentMonth,
+      voucher: {
+        deletedAt: null,
+        ...(isAdmin ? {} : { userId }),
+      },
+    },
   });
 
   const totalContracts = await prisma.contract.count({
@@ -78,8 +95,8 @@ async function getDashboardData(userId: string, isAdmin: boolean) {
     expiringContracts,
     stats: {
       totalVouchers,
-      completedVouchers,
-      pendingVouchers: totalVouchers - completedVouchers,
+      completedVouchers: completedVouchersThisMonth,
+      pendingVouchers: totalVouchers - completedVouchersThisMonth,
       totalContracts,
       expiredContracts,
       activeContracts: totalContracts - expiredContracts,

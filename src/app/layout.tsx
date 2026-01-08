@@ -7,7 +7,7 @@ import { Providers } from '@/components/Providers';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: '이지켐 총무 자산관리',
+  title: '이지켐 계약 및 전표 관리',
   description: '계약 및 전표 관리 시스템',
 };
 

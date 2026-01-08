@@ -32,9 +32,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Download, Upload, FileText, FileSpreadsheet } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, Upload, FileText, FileSpreadsheet, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { formatCurrency, getRepeatDayText } from '@/lib/utils';
+
+interface VoucherCompletion {
+  year: number;
+  month: number;
+}
 
 interface Voucher {
   id: string;
@@ -43,10 +48,9 @@ interface Voucher {
   vatAmount: number | null;
   accountName: string;
   repeatDay: number;
-  isCompleted: boolean;
-  completedAt: string | null;
   userId: string;
   user: { name: string };
+  completions: VoucherCompletion[];
   createdAt: string;
 }
 
@@ -63,6 +67,11 @@ export default function VouchersPage() {
     accountName: '',
     repeatDay: '1',
   });
+
+  // 월별 필터링을 위한 상태
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const currentYear = currentDate.getFullYear();
+  const currentMonth = currentDate.getMonth() + 1; // 1-12
 
   useEffect(() => {
     fetchVouchers();
@@ -129,16 +138,26 @@ export default function VouchersPage() {
     }
   };
 
+  // 월별 처리완료 체크
   const handleComplete = async (id: string, isCompleted: boolean) => {
     try {
       const res = await fetch(`/api/vouchers/${id}/complete`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isCompleted }),
+        body: JSON.stringify({ 
+          isCompleted,
+          year: currentYear,
+          month: currentMonth,
+        }),
       });
       if (!res.ok) throw new Error();
 
-      toast({ title: '성공', description: isCompleted ? '처리 완료되었습니다.' : '미처리로 변경되었습니다.' });
+      toast({ 
+        title: '성공', 
+        description: isCompleted 
+          ? `${currentYear}년 ${currentMonth}월 처리 완료되었습니다.` 
+          : `${currentYear}년 ${currentMonth}월 미처리로 변경되었습니다.` 
+      });
       fetchVouchers();
     } catch (error) {
       toast({ title: '오류', description: '상태 변경에 실패했습니다.', variant: 'destructive' });
@@ -207,6 +226,46 @@ export default function VouchersPage() {
     e.target.value = '';
   };
 
+  // 이전 달로 이동
+  const goToPreviousMonth = () => {
+    setCurrentDate(new Date(currentYear, currentMonth - 2, 1));
+  };
+
+  // 다음 달로 이동
+  const goToNextMonth = () => {
+    setCurrentDate(new Date(currentYear, currentMonth, 1));
+  };
+
+  // 이번 달로 이동
+  const goToCurrentMonth = () => {
+    setCurrentDate(new Date());
+  };
+
+  // 해당 월의 마지막 날 구하기
+  const getLastDayOfMonth = (year: number, month: number) => {
+    return new Date(year, month, 0).getDate();
+  };
+
+  // 전표가 해당 월에 처리완료되었는지 확인
+  const isCompletedForMonth = (voucher: Voucher, year: number, month: number) => {
+    return voucher.completions?.some(c => c.year === year && c.month === month) || false;
+  };
+
+  // 해당 월에 표시해야 할 전표인지 확인 (반복일자가 해당 월에 있는지)
+  const shouldShowInMonth = (voucher: Voucher, year: number, month: number) => {
+    const lastDay = getLastDayOfMonth(year, month);
+    const repeatDay = voucher.repeatDay === 0 ? lastDay : voucher.repeatDay;
+    // 반복일자가 해당 월의 일수보다 크면 해당 월에 표시하지 않음 (단, 말일은 항상 표시)
+    return voucher.repeatDay === 0 || repeatDay <= lastDay;
+  };
+
+  // 해당 월에 표시할 전표 필터링
+  const filteredVouchers = vouchers.filter(v => shouldShowInMonth(v, currentYear, currentMonth));
+
+  // 처리 완료/미완료 통계
+  const completedCount = filteredVouchers.filter(v => isCompletedForMonth(v, currentYear, currentMonth)).length;
+  const pendingCount = filteredVouchers.length - completedCount;
+
   const repeatDayOptions = [
     { value: '0', label: '말일' },
     ...Array.from({ length: 31 }, (_, i) => ({
@@ -214,6 +273,15 @@ export default function VouchersPage() {
       label: `${i + 1}일`,
     })),
   ];
+
+  const formatMonth = (date: Date) => {
+    return `${date.getFullYear()}년 ${date.getMonth() + 1}월`;
+  };
+
+  const isCurrentMonth = () => {
+    const now = new Date();
+    return currentYear === now.getFullYear() && currentMonth === now.getMonth() + 1;
+  };
 
   return (
     <div className="space-y-6">
@@ -337,11 +405,46 @@ export default function VouchersPage() {
         </div>
       </div>
 
+      {/* 월 선택 네비게이션 */}
+      <Card className="border-0 shadow-md">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={goToPreviousMonth}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="flex items-center gap-2 px-4">
+                <Calendar className="h-5 w-5 text-blue-600" />
+                <span className="text-lg font-semibold">{formatMonth(currentDate)}</span>
+              </div>
+              <Button variant="outline" size="icon" onClick={goToNextMonth}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              {!isCurrentMonth() && (
+                <Button variant="outline" size="sm" onClick={goToCurrentMonth} className="ml-2">
+                  이번 달
+                </Button>
+              )}
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                  처리완료 {completedCount}건
+                </Badge>
+                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                  미처리 {pendingCount}건
+                </Badge>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="border-0 shadow-md">
         <CardHeader className="border-b bg-slate-50/50">
           <CardTitle className="text-lg flex items-center gap-2">
             <FileText className="h-5 w-5 text-blue-600" />
-            전표 목록
+            {formatMonth(currentDate)} 전표 목록
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -349,7 +452,7 @@ export default function VouchersPage() {
             <div className="flex items-center justify-center py-12">
               <div className="h-8 w-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : vouchers.length === 0 ? (
+          ) : filteredVouchers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-gray-500">
               <FileText className="h-12 w-12 text-gray-300 mb-3" />
               <p className="font-medium">등록된 전표가 없습니다</p>
@@ -370,53 +473,61 @@ export default function VouchersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {vouchers.map((voucher) => (
-                  <TableRow key={voucher.id} className={voucher.isCompleted ? 'bg-green-50/50' : ''}>
-                    <TableCell>
-                      <Checkbox
-                        checked={voucher.isCompleted}
-                        onCheckedChange={(checked) => handleComplete(voucher.id, checked as boolean)}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {voucher.description}
-                        {voucher.isCompleted && (
-                          <Badge variant="success" className="text-xs">완료</Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>{voucher.accountName}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(voucher.amount)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(voucher.vatAmount)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{getRepeatDayText(voucher.repeatDay)}</Badge>
-                    </TableCell>
-                    {session?.user?.isAdmin && (
-                      <TableCell className="text-gray-500">{voucher.user.name}</TableCell>
-                    )}
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(voucher)}
-                          className="h-8 w-8"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(voucher.id)}
-                          className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {filteredVouchers.map((voucher) => {
+                  const isCompleted = isCompletedForMonth(voucher, currentYear, currentMonth);
+                  const lastDay = getLastDayOfMonth(currentYear, currentMonth);
+                  const displayDay = voucher.repeatDay === 0 ? lastDay : voucher.repeatDay;
+                  
+                  return (
+                    <TableRow key={voucher.id} className={isCompleted ? 'bg-green-50/50' : ''}>
+                      <TableCell>
+                        <Checkbox
+                          checked={isCompleted}
+                          onCheckedChange={(checked) => handleComplete(voucher.id, checked as boolean)}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {voucher.description}
+                          {isCompleted && (
+                            <Badge variant="success" className="text-xs">완료</Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>{voucher.accountName}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(voucher.amount)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(voucher.vatAmount)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {voucher.repeatDay === 0 ? `${displayDay}일 (말일)` : `${displayDay}일`}
+                        </Badge>
+                      </TableCell>
+                      {session?.user?.isAdmin && (
+                        <TableCell className="text-gray-500">{voucher.user.name}</TableCell>
+                      )}
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEdit(voucher)}
+                            className="h-8 w-8"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(voucher.id)}
+                            className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

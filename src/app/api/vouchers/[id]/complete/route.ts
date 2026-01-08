@@ -14,7 +14,12 @@ export async function PUT(
 
     const { id } = await params;
     const body = await request.json();
-    const { isCompleted } = body;
+    const { isCompleted, year, month } = body;
+
+    // Validate year and month
+    if (!year || !month || month < 1 || month > 12) {
+      return NextResponse.json({ error: 'Invalid year or month' }, { status: 400 });
+    }
 
     // Check ownership
     const existing = await prisma.voucher.findFirst({
@@ -29,11 +34,44 @@ export async function PUT(
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const voucher = await prisma.voucher.update({
+    if (isCompleted) {
+      // Add completion record for this month
+      await prisma.voucherCompletion.upsert({
+        where: {
+          voucherId_year_month: {
+            voucherId: id,
+            year,
+            month,
+          },
+        },
+        create: {
+          voucherId: id,
+          year,
+          month,
+        },
+        update: {
+          completedAt: new Date(),
+        },
+      });
+    } else {
+      // Remove completion record for this month
+      await prisma.voucherCompletion.deleteMany({
+        where: {
+          voucherId: id,
+          year,
+          month,
+        },
+      });
+    }
+
+    // Fetch updated voucher with completions
+    const voucher = await prisma.voucher.findUnique({
       where: { id },
-      data: {
-        isCompleted,
-        completedAt: isCompleted ? new Date() : null,
+      include: {
+        user: { select: { name: true } },
+        completions: {
+          select: { year: true, month: true },
+        },
       },
     });
 

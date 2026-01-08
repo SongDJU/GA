@@ -172,7 +172,7 @@ export function generateEmailTemplate(data: AlertData): string {
       <div style="max-width: 800px; margin: 0 auto; background-color: #ffffff;">
         <!-- Header -->
         <div style="background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%); padding: 30px; text-align: center;">
-          <h1 style="color: #ffffff; margin: 0 0 8px 0; font-size: 24px;">이지켐 총무 자산관리</h1>
+          <h1 style="color: #ffffff; margin: 0 0 8px 0; font-size: 24px;">이지켐 계약 및 전표 관리</h1>
           <p style="color: rgba(255,255,255,0.9); margin: 0; font-size: 14px;">일일 업무 알림</p>
         </div>
 
@@ -206,7 +206,7 @@ export function generateEmailTemplate(data: AlertData): string {
         <!-- Footer -->
         <div style="background-color: #f8fafc; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
           <p style="color: #9ca3af; font-size: 12px; margin: 0;">
-            이 메일은 이지켐 총무 자산관리 시스템에서 자동 발송되었습니다.
+            이 메일은 이지켐 계약 및 전표 관리 시스템에서 자동 발송되었습니다.
           </p>
           <p style="color: #9ca3af; font-size: 12px; margin: 8px 0 0 0;">
             © ${new Date().getFullYear()} EasyChem. All rights reserved.
@@ -256,10 +256,10 @@ export async function sendDailyAlerts() {
     });
 
     const today = new Date();
-    const currentMonth = today.getMonth();
+    const currentMonth = today.getMonth() + 1; // 1-12
     const currentYear = today.getFullYear();
     const currentDay = today.getDate();
-    const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const lastDayOfMonth = new Date(currentYear, currentMonth, 0).getDate();
 
     // Alert days for contracts
     const alertDays = [45, 30, 20, 10, 3, 2, 1];
@@ -273,18 +273,29 @@ export async function sendDailyAlerts() {
 
         if (!user) continue;
 
-        // Get vouchers for this user
+        // Get vouchers for this user with completions
         const vouchers = await prisma.voucher.findMany({
           where: {
             userId: mailSetting.userId,
             deletedAt: null,
-            isCompleted: false,
+          },
+          include: {
+            completions: {
+              where: {
+                year: currentYear,
+                month: currentMonth,
+              },
+              select: { year: true, month: true },
+            },
           },
           orderBy: { repeatDay: 'asc' },
         });
 
-        // Filter vouchers that should appear this month
+        // Filter vouchers that are not completed this month and should appear
         const thisMonthVouchers = vouchers.filter((v) => {
+          // Skip if already completed this month
+          if (v.completions && v.completions.length > 0) return false;
+          
           const repeatDay = v.repeatDay === 0 ? lastDayOfMonth : v.repeatDay;
           return repeatDay >= currentDay;
         });

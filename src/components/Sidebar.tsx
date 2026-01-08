@@ -50,7 +50,7 @@ export function Sidebar({ user }: SidebarProps) {
         </div>
         <div>
           <h1 className="text-lg font-bold text-white">이지켐</h1>
-          <p className="text-xs text-slate-400">총무 자산관리</p>
+          <p className="text-xs text-slate-400">계약 및 전표 관리</p>
         </div>
       </div>
 

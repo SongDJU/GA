@@ -33,15 +33,27 @@ model Voucher {
   vatAmount     Float?   // 부가세액 (선택)
   accountName   String   // 계정과목명
   repeatDay     Int      // 반복일자 (1-31, 0은 말일)
-  isCompleted   Boolean  @default(false) // 처리완료 체크
-  completedAt   DateTime? // 처리완료 일시
   
   userId        String
   user          User     @relation(fields: [userId], references: [id])
   
+  completions   VoucherCompletion[] // 월별 처리완료 기록
+  
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   deletedAt     DateTime? // 휴지통용 소프트 삭제
+}
+
+// 전표 월별 처리완료 기록
+model VoucherCompletion {
+  id          String   @id @default(uuid())
+  voucherId   String
+  voucher     Voucher  @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  year        Int      // 년도
+  month       Int      // 월 (1-12)
+  completedAt DateTime @default(now())
+  
+  @@unique([voucherId, year, month]) // 전표당 월별 1개만 가능
 }
 
 // 계약 카테고리 (임대계약, 유지보수, 서비스계약, 구매계약, 차량, 기타)
