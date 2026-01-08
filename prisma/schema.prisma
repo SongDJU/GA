@@ -1,0 +1,110 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 사용자 모델
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?  @unique
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  // 관계
+  vouchers  Voucher[]
+  contracts Contract[]
+}
+
+// 전표 모델
+model Voucher {
+  id            String   @id @default(uuid())
+  description   String   // 적요명
+  amount        Float?   // 금액 (선택)
+  vatAmount     Float?   // 부가세액 (선택)
+  accountName   String   // 계정과목명
+  repeatDay     Int      // 반복일자 (1-31, 0은 말일)
+  isCompleted   Boolean  @default(false) // 처리완료 체크
+  completedAt   DateTime? // 처리완료 일시
+  
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime? // 휴지통용 소프트 삭제
+}
+
+// 계약 카테고리 (임대계약, 유지보수, 서비스계약, 구매계약, 차량, 기타)
+model ContractCategory {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  contracts Contract[]
+}
+
+// 계약 모델
+model Contract {
+  id              String   @id @default(uuid())
+  name            String   // 계약명 (필수)
+  company         String?  // 계약업체 (선택)
+  amount          Float?   // 계약금액 (선택)
+  startDate       DateTime? // 계약시작일 (선택)
+  endDate         DateTime // 계약만료일 (필수)
+  contactInfo     String?  // 담당자 연락처 (선택)
+  notes           String?  // 비고 (선택)
+  
+  categoryId      String
+  category        ContractCategory @relation(fields: [categoryId], references: [id])
+  
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  
+  attachments     Attachment[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime? // 휴지통용 소프트 삭제
+}
+
+// 첨부파일 모델
+model Attachment {
+  id          String   @id @default(uuid())
+  filename    String
+  originalName String
+  mimeType    String
+  size        Int
+  path        String
+  
+  contractId  String
+  contract    Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+}
+
+// 메일 설정 모델 (사용자별)
+model MailSetting {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  email     String   // 수신 메일 주소
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// 시스템 설정 (SMTP 등)
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
