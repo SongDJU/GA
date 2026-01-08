@@ -153,7 +153,7 @@ export function Sidebar({ user }: SidebarProps) {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => signOut({ callbackUrl: '/login' })}
+            onClick={() => signOut({ callbackUrl: `${window.location.origin}/login` })}
             className="text-slate-400 hover:text-white hover:bg-slate-700/50"
           >
             <LogOut className="h-4 w-4" />
