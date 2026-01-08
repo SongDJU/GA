@@ -13,6 +13,8 @@ import {
   Trash2,
   LogOut,
   Building2,
+  Bell,
+  History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -27,6 +29,8 @@ const navigation = [
   { name: '대시보드', href: '/dashboard', icon: LayoutDashboard },
   { name: '전표 관리', href: '/dashboard/vouchers', icon: FileText },
   { name: '계약 관리', href: '/dashboard/contracts', icon: FileSignature },
+  { name: '계약 종료내역', href: '/dashboard/contracts/history', icon: History },
+  { name: '알림 히스토리', href: '/dashboard/alerts', icon: Bell },
 ];
 
 const adminNavigation = [

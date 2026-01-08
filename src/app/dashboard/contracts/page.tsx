@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Pencil, Trash2, Download, Upload, FileSignature, Paperclip, FileSpreadsheet, Search, User, Users, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Download, Upload, FileSignature, Paperclip, FileSpreadsheet, Search, User, Users, X, RefreshCw, History } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { formatCurrency, formatDate, getDaysUntilExpiry } from '@/lib/utils';
 
@@ -86,6 +86,15 @@ export default function ContractsPage() {
     categoryId: '',
   });
   const [files, setFiles] = useState<File[]>([]);
+  const [renewDialogOpen, setRenewDialogOpen] = useState(false);
+  const [renewingContract, setRenewingContract] = useState<Contract | null>(null);
+  const [renewFormData, setRenewFormData] = useState({
+    newStartDate: '',
+    newEndDate: '',
+    newAmount: '',
+    newContactInfo: '',
+    newNotes: '',
+  });
 
   const isAdmin = session?.user?.isAdmin || false;
 
@@ -240,6 +249,44 @@ export default function ContractsPage() {
     }
 
     e.target.value = '';
+  };
+
+  const handleRenew = (contract: Contract) => {
+    setRenewingContract(contract);
+    setRenewFormData({
+      newStartDate: contract.endDate.split('T')[0],
+      newEndDate: '',
+      newAmount: contract.amount?.toString() || '',
+      newContactInfo: contract.contactInfo || '',
+      newNotes: contract.notes || '',
+    });
+    setRenewDialogOpen(true);
+  };
+
+  const handleRenewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!renewingContract || !renewFormData.newEndDate) {
+      toast({ title: '오류', description: '새로운 계약 만료일은 필수입니다.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/contracts/${renewingContract.id}/renew`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(renewFormData),
+      });
+
+      if (!res.ok) throw new Error();
+
+      toast({ title: '성공', description: '계약이 갱신되었습니다. 이전 계약은 종료 내역에 저장됩니다.' });
+      setRenewDialogOpen(false);
+      setRenewingContract(null);
+      fetchContracts();
+    } catch (error) {
+      toast({ title: '오류', description: '계약 갱신에 실패했습니다.', variant: 'destructive' });
+    }
   };
 
   const getDaysUntilBadge = (endDate: string) => {
@@ -558,7 +605,7 @@ export default function ContractsPage() {
                   <TableHead>만료일</TableHead>
                   <TableHead>상태</TableHead>
                   {isAdmin && viewMode === 'all' && <TableHead>담당자</TableHead>}
-                  <TableHead className="w-24">관리</TableHead>
+                  <TableHead className="w-32">관리</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -605,8 +652,18 @@ export default function ContractsPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                onClick={() => handleRenew(contract)}
+                                className="h-8 w-8 text-green-600 hover:text-green-700 hover:bg-green-50"
+                                title="계약 갱신"
+                              >
+                                <RefreshCw className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={() => handleEdit(contract)}
                                 className="h-8 w-8"
+                                title="수정"
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>
@@ -615,6 +672,7 @@ export default function ContractsPage() {
                                 size="icon"
                                 onClick={() => handleDelete(contract.id)}
                                 className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                title="삭제"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -633,6 +691,113 @@ export default function ContractsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* 갱신 다이얼로그 */}
+      <Dialog open={renewDialogOpen} onOpenChange={(open) => {
+        setRenewDialogOpen(open);
+        if (!open) {
+          setRenewingContract(null);
+        }
+      }}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5 text-green-600" />
+              계약 갱신
+            </DialogTitle>
+            <DialogDescription>
+              <span className="font-medium text-gray-800">{renewingContract?.name}</span> 계약을 갱신합니다.
+              <br />
+              <span className="text-amber-600">기존 계약 내역은 &quot;계약 종료 내역&quot;에 저장됩니다.</span>
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleRenewSubmit}>
+            <div className="grid gap-4 py-4">
+              {/* 기존 계약 정보 표시 */}
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-xs text-gray-500 mb-1">기존 계약 만료일</p>
+                <p className="font-medium">{renewingContract ? formatDate(renewingContract.endDate) : '-'}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="newStartDate">새 계약 시작일</Label>
+                  <Input
+                    id="newStartDate"
+                    type="date"
+                    value={renewFormData.newStartDate}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, newStartDate: e.target.value })}
+                  />
+                  <p className="text-xs text-gray-500">기본값: 기존 만료일 다음날</p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="newEndDate">새 계약 만료일 *</Label>
+                  <Input
+                    id="newEndDate"
+                    type="date"
+                    value={renewFormData.newEndDate}
+                    onChange={(e) => setRenewFormData({ ...renewFormData, newEndDate: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="newAmount">새 계약금액</Label>
+                <Input
+                  id="newAmount"
+                  type="number"
+                  value={renewFormData.newAmount}
+                  onChange={(e) => setRenewFormData({ ...renewFormData, newAmount: e.target.value })}
+                  placeholder="변경 없으면 비워두세요"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="newContactInfo">담당자 연락처</Label>
+                <Input
+                  id="newContactInfo"
+                  value={renewFormData.newContactInfo}
+                  onChange={(e) => setRenewFormData({ ...renewFormData, newContactInfo: e.target.value })}
+                  placeholder="변경 없으면 비워두세요"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="newNotes">비고</Label>
+                <Textarea
+                  id="newNotes"
+                  value={renewFormData.newNotes}
+                  onChange={(e) => setRenewFormData({ ...renewFormData, newNotes: e.target.value })}
+                  placeholder="변경 없으면 비워두세요"
+                  rows={2}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setRenewDialogOpen(false)}>
+                취소
+              </Button>
+              <Button type="submit" className="bg-green-600 hover:bg-green-700">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                계약 갱신
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 계약 종료 내역 바로가기 */}
+      <div className="flex justify-end">
+        <Button 
+          variant="outline" 
+          onClick={() => window.location.href = '/dashboard/contracts/history'}
+          className="text-slate-600"
+        >
+          <History className="h-4 w-4 mr-2" />
+          계약 종료 내역 보기
+        </Button>
+      </div>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { FileText, FileSignature, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
 import { formatCurrency, formatDate, getDaysUntilExpiry, getRepeatDayText } from '@/lib/utils';
 import Link from 'next/link';
+import { DashboardCharts } from '@/components/DashboardCharts';
 
 async function getDashboardData(userId: string, isAdmin: boolean) {
   const today = new Date();
@@ -59,13 +60,15 @@ async function getDashboardData(userId: string, isAdmin: boolean) {
   });
 
   // Filter contracts by expiry alerts (45, 30, 20, 10, 3, 2, 1 days)
-  const alertDays = [45, 30, 20, 10, 3, 2, 1];
   const expiringContracts = contracts
     .map((c) => ({
       ...c,
       daysUntil: getDaysUntilExpiry(c.endDate),
     }))
     .filter((c) => c.daysUntil >= 0 && c.daysUntil <= 45);
+
+  // Calculate expiring soon count (0-45 days)
+  const expiringSoonCount = expiringContracts.length;
 
   // Stats
   const totalVouchers = await prisma.voucher.count({
@@ -99,7 +102,8 @@ async function getDashboardData(userId: string, isAdmin: boolean) {
       pendingVouchers: totalVouchers - completedVouchersThisMonth,
       totalContracts,
       expiredContracts,
-      activeContracts: totalContracts - expiredContracts,
+      expiringSoon: expiringSoonCount,
+      activeContracts: totalContracts - expiredContracts - expiringSoonCount,
     },
   };
 }
@@ -122,6 +126,21 @@ export default async function DashboardPage() {
           안녕하세요, {session.user.name}님! 오늘의 업무 현황을 확인하세요.
         </p>
       </div>
+
+      {/* Charts */}
+      <DashboardCharts 
+        voucherStats={{
+          totalVouchers: stats.totalVouchers,
+          completedVouchers: stats.completedVouchers,
+          pendingVouchers: stats.pendingVouchers,
+        }}
+        contractStats={{
+          totalContracts: stats.totalContracts,
+          expiredContracts: stats.expiredContracts,
+          expiringSoon: stats.expiringSoon,
+          activeContracts: stats.activeContracts,
+        }}
+      />
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

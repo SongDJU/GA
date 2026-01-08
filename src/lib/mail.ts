@@ -361,8 +361,39 @@ export async function sendDailyAlerts() {
           html: emailHtml,
         });
 
+        // Save alert history - success
+        await prisma.alertHistory.create({
+          data: {
+            userId: user.id,
+            userEmail: mailSetting.email,
+            userName: user.name,
+            voucherCount: thisMonthVouchers.length,
+            contractCount: alertContracts.length,
+            status: 'success',
+          },
+        });
+
         console.log(`Email sent to ${mailSetting.email}`);
       } catch (error) {
+        // Save alert history - failed
+        const user = await prisma.user.findUnique({
+          where: { id: mailSetting.userId },
+        });
+        
+        if (user) {
+          await prisma.alertHistory.create({
+            data: {
+              userId: user.id,
+              userEmail: mailSetting.email,
+              userName: user.name,
+              voucherCount: 0,
+              contractCount: 0,
+              status: 'failed',
+              errorMessage: error instanceof Error ? error.message : 'Unknown error',
+            },
+          });
+        }
+        
         console.error(`Failed to send email to ${mailSetting.email}:`, error);
       }
     }

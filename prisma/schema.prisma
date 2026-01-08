@@ -120,3 +120,33 @@ model SystemSetting {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// 알림 히스토리 모델
+model AlertHistory {
+  id            String   @id @default(uuid())
+  userId        String
+  userEmail     String   // 수신 이메일
+  userName      String   // 수신자 이름
+  voucherCount  Int      // 전표 알림 개수
+  contractCount Int      // 계약 알림 개수
+  status        String   // success, failed
+  errorMessage  String?  // 실패 시 에러 메시지
+  sentAt        DateTime @default(now())
+}
+
+// 계약 종료 내역 모델 (갱신된 계약의 이전 내역)
+model ContractHistory {
+  id              String   @id @default(uuid())
+  originalId      String   // 원본 계약 ID (갱신된 새 계약)
+  name            String   // 계약명
+  company         String?  // 계약업체
+  amount          Float?   // 계약금액
+  startDate       DateTime? // 계약시작일
+  endDate         DateTime // 계약만료일
+  contactInfo     String?  // 담당자 연락처
+  notes           String?  // 비고
+  categoryName    String   // 카테고리명
+  userName        String   // 담당자명
+  renewedAt       DateTime @default(now()) // 갱신일 (종료일)
+  createdAt       DateTime // 원본 등록일
+}
